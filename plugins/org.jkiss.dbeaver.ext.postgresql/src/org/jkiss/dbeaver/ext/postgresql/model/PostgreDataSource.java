@@ -472,7 +472,7 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
         super.refreshObject(monitor);
         shutdown(monitor);
 
-        synchronized (this){
+        synchronized (this) {
             this.databaseCache.clearCache();
             this.activeDatabaseName = null;
 
