@@ -472,11 +472,13 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
         super.refreshObject(monitor);
         shutdown(monitor);
 
-        this.databaseCache.clearCache();
-        this.activeDatabaseName = null;
+        synchronized (this){
+            this.databaseCache.clearCache();
+            this.activeDatabaseName = null;
 
-        this.initializeRemoteInstance(monitor);
-        this.initialize(monitor);
+            this.initializeRemoteInstance(monitor);
+            this.initialize(monitor);
+        }
 
         return this;
     }
@@ -661,19 +663,21 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
     @NotNull
     @Override
     public PostgreDatabase getDefaultInstance() {
-        PostgreDatabase defDatabase = databaseCache.getCachedObject(activeDatabaseName);
-        if (defDatabase == null) {
-            defDatabase = databaseCache.getCachedObject(PostgreConstants.DEFAULT_DATABASE);
-        }
-        if (defDatabase == null) {
-            final List<PostgreDatabase> allDatabases = databaseCache.getCachedObjects();
-            if (allDatabases.isEmpty()) {
-                // Looks like we are not connected or in connection process right now - no instance then
-                throw new IllegalStateException("No databases found on the server");
+        synchronized (this){
+            PostgreDatabase defDatabase = databaseCache.getCachedObject(activeDatabaseName);
+            if (defDatabase == null) {
+                defDatabase = databaseCache.getCachedObject(PostgreConstants.DEFAULT_DATABASE);
             }
-            defDatabase = allDatabases.get(0);
+            if (defDatabase == null) {
+                final List<PostgreDatabase> allDatabases = databaseCache.getCachedObjects();
+                if (allDatabases.isEmpty()) {
+                    // Looks like we are not connected or in connection process right now - no instance then
+                    throw new IllegalStateException("No databases found on the server");
+                }
+                defDatabase = allDatabases.get(0);
+            }
+            return defDatabase;
         }
-        return defDatabase;
     }
 
     @NotNull
