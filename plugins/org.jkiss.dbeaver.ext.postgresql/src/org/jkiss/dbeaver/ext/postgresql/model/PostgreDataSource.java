@@ -169,7 +169,9 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
         }
         databaseCache.setCache(dbList);
         // Initiate default context
-        getDefaultInstance().checkInstanceConnection(monitor, false);
+        if (!this.isReconnecting()) {
+            getDefaultInstance().checkInstanceConnection(monitor, false);
+        }
         try {
             // Preload some settings, if available
             settingCache.getObject(monitor, this, PostgreConstants.OPTION_STANDARD_CONFORMING_STRINGS);
@@ -467,18 +469,19 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
 
     @Override
     public DBSObject refreshObject(@NotNull DBRProgressMonitor monitor)
-        throws DBException
-    {
+        throws DBException {
         super.refreshObject(monitor);
         shutdown(monitor);
 
-        synchronized (this) {
+        try {
+            this.setReconnecting(true);
             this.databaseCache.clearCache();
             this.activeDatabaseName = null;
-
             this.initializeRemoteInstance(monitor);
-            this.initialize(monitor);
+        } finally {
+            this.setReconnecting(false);
         }
+        this.initialize(monitor);
 
         return this;
     }
@@ -663,21 +666,19 @@ public class PostgreDataSource extends JDBCDataSource implements DBSInstanceCont
     @NotNull
     @Override
     public PostgreDatabase getDefaultInstance() {
-        synchronized (this){
-            PostgreDatabase defDatabase = databaseCache.getCachedObject(activeDatabaseName);
-            if (defDatabase == null) {
-                defDatabase = databaseCache.getCachedObject(PostgreConstants.DEFAULT_DATABASE);
-            }
-            if (defDatabase == null) {
-                final List<PostgreDatabase> allDatabases = databaseCache.getCachedObjects();
-                if (allDatabases.isEmpty()) {
-                    // Looks like we are not connected or in connection process right now - no instance then
-                    throw new IllegalStateException("No databases found on the server");
-                }
-                defDatabase = allDatabases.get(0);
-            }
-            return defDatabase;
+        PostgreDatabase defDatabase = databaseCache.getCachedObject(activeDatabaseName);
+        if (defDatabase == null) {
+            defDatabase = databaseCache.getCachedObject(PostgreConstants.DEFAULT_DATABASE);
         }
+        if (defDatabase == null) {
+            final List<PostgreDatabase> allDatabases = databaseCache.getCachedObjects();
+            if (allDatabases.isEmpty()) {
+                // Looks like we are not connected or in connection process right now - no instance then
+                throw new IllegalStateException("No databases found on the server");
+            }
+            defDatabase = allDatabases.get(0);
+        }
+        return defDatabase;
     }
 
     @NotNull
